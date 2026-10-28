@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jogo do Castor Ocupado</title>
+<style>
+  :root { --bg:#f6f5fb; --card:#fff; --ink:#1f1d2b; --muted:#6b6880; --accent:#6d3fc0; --ok:#2e8b57; --warn:#c0603f; --line:#e2dff0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16141f; --card:#23202f; --ink:#f1eefa; --muted:#a39fb8; --accent:#a98bf0; --ok:#5fcf8f; --warn:#f08c6a; --line:#3a3648; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.1rem; margin: 0 0 10px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .grid { display:grid; gap:16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .stats { display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:10px; }
+  .stat { text-align:center; padding:10px; border:1px solid var(--line); border-radius:10px; }
+  .stat b { display:block; font-size:1.5rem; }
+  .stat span { color:var(--muted); font-size:.85rem; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:10px 14px; font-size:1rem; cursor:pointer; margin:4px 4px 4px 0; }
+  button:disabled { opacity:.5; cursor:default; }
+  button.sec { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  .bar { height:10px; background:var(--line); border-radius:6px; overflow:hidden; margin:10px 0; }
+  .bar div { height:100%; width:0; background:var(--accent); transition: width .2s; }
+  table { border-collapse: collapse; width:100%; font-size:.95rem; }
+  td, th { border:1px solid var(--line); padding:6px 8px; text-align:center; }
+  .hist { display:flex; align-items:flex-end; gap:8px; height:160px; padding-top:10px; }
+  .hist .col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
+  .hist .fill { width:100%; background:var(--accent); border-radius:6px 6px 0 0; min-height:2px; }
+  .hist small { color:var(--muted); margin-top:4px; }
+  .tape { display:flex; gap:4px; overflow-x:auto; padding:8px 0; }
+  .cell { min-width:40px; height:44px; display:flex; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:6px; font-family:monospace; font-size:1.1rem; }
+  .cell.head { border:2px solid var(--warn); background:var(--line); }
+  .cell.one { color:var(--ok); font-weight:bold; }
+  .status { font-weight:bold; }
+  .note { color:var(--muted); font-size:.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>O Jogo do Castor Ocupado</h1>
+  <p class="sub">Busy Beaver Explorer: simula todas as Máquinas de Turing com <i>n</i> estados e procura a campeã, a que escreve mais 1s e para.</p>
+
+  <section class="card">
+    <h2>1. Escolha a quantidade de estados</h2>
+    <button id="btn2" class="sec">2 estados</button>
+    <button id="btn3" class="sec">3 estados</button>
+    <button id="run">Explorar todas as máquinas</button>
+    <p class="note">Controle de parada: limite de passos por máquina
+      <select id="limit"><option value="50">50</option><option value="100" selected>100</option><option value="500">500</option></select>
+    </p>
+    <div class="bar"><div id="bar"></div></div>
+    <p class="note" id="progress">Pronto.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Resultado da busca</h2>
+    <div class="stats">
+      <div class="stat"><b id="sTotal">-</b><span>máquinas testadas</span></div>
+      <div class="stat"><b id="sParada">-</b><span>param (com 1s)</span></div>
+      <div class="stat"><b id="sLoop">-</b><span>loop detectado</span></div>
+      <div class="stat"><b id="sLimite">-</b><span>divergem (limite)</span></div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>3. MT campeã</h2>
+      <p id="champ">Rode a busca para encontrar a campeã.</p>
+      <div id="champTable"></div>
+    </section>
+
+    <section class="card">
+      <h2>4. Máquinas que param, por número de 1s</h2>
+      <div class="hist" id="hist"></div>
+    </section>
+
+    <section class="card">
+      <h2>5. Máquinas que param, por contagem de passos</h2>
+      <div class="hist" id="histSteps"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>6. Simulação passo a passo da campeã</h2>
+    <div class="tape" id="tape"></div>
+    <p>Estado: <b id="stState">-</b> &nbsp; Passo: <b id="stStep">0</b> &nbsp; <span class="status" id="stStatus"></span></p>
+    <button id="prev" class="sec">Anterior</button>
+    <button id="next" class="sec">Próximo</button>
+    <button id="play" class="sec">Play</button>
+    <button id="reset" class="sec">Reiniciar</button>
+    <p class="note">Limite de parada atual: <b id="limitNote">100</b> passos. Uma máquina que passa disso é tratada como divergente. Ver o roteiro para o motivo.</p>
+  </section>
+</main>
+
+<script>
+// ---- Núcleo: simulador de Máquinas de Turing ----
+let LIMIT = 100;            // limite de passos (controle de parada), escolhido na tela
+const MAX = 1000;           // maior limite permitido: dimensiona a fita
+const NAMES = 'ABCDEFGH';
+const MID = MAX + 1;
+const tape = new Uint8Array(2 * MAX + 3); // fita limpa; zera só a área usada
+
+// Tabela t: para cada (estado, símbolo lido) guarda [escreve, move (1=direita), próximo estado].
+// Próximo estado = n significa HALT.
+function decode(i, n, t) {
+  const opts = 4 * (n + 1);
+  for (let e = 0; e < 2 * n; e++) {
+    const d = i % opts;
+    i = (i - d) / opts;
+    t[e * 3] = d & 1;
+    t[e * 3 + 1] = (d >> 1) & 1;
+    t[e * 3 + 2] = d >> 2;
+  }
+}
+
+// Roda a máquina. Devolve status: 'parada', 'loop' (configuração repete) ou 'limite'.
+function simulate(t, n) {
+  let state = 0, head = MID, steps = 0, ones = 0, lo = MID, hi = MID;
+  let status = 'limite';
+  while (steps < LIMIT) {
+    const r = tape[head];
+    // Heurística de loop exato: voltou ao estado A, lendo branco, com a fita toda em branco
+    // -> a configuração inicial se repete para sempre.
+    if (state === 0 && r === 0 && ones === 0 && steps > 0) { status = 'loop'; break; }
+    const k = (state * 2 + r) * 3;
+    const q = t[k + 2];
+    tape[head] = t[k];
+    ones += t[k] - r;
+    steps++;
+    if (q === n) { status = 'parada'; break; }
+    head += t[k + 1] ? 1 : -1;
+    if (head < lo) lo = head;
+    if (head > hi) hi = head;
+    state = q;
+  }
+  tape.fill(0, lo, hi + 1);
+  return { status, steps, ones };
+}
+
+// Roda a campeã de novo, guardando cada passo para mostrar na tela.
+function replay(t, n) {
+  const cells = {};
+  let state = 0, head = 0;
+  const frames = [{ state, head, cells: {} }];
+  for (let s = 0; s < LIMIT; s++) {
+    const r = cells[head] || 0;
+    const k = (state * 2 + r) * 3;
+    cells[head] = t[k];
+    head += t[k + 1] ? 1 : -1;
+    state = t[k + 2];
+    frames.push({ state, head, cells: { ...cells } });
+    if (state === n) break;
+  }
+  return frames;
+}
+
+// ---- Busca em blocos (não trava a página) ----
+let job = null;
+let timer = null;
+let n = 2;
+
+function startSearch() {
+  stopPlay();
+  const total = Math.pow(4 * (n + 1), 2 * n);
+  job = { n, total, next: 0, parada: 0, loop: 0, limite: 0, hist: {}, stepHist: {}, best: null, t: new Int8Array(6 * n) };
+  document.getElementById('run').disabled = true;
+  chunk();
+}
+
+function chunk() {
+  const end = Math.min(job.next + 20000, job.total);
+  for (; job.next < end; job.next++) {
+    decode(job.next, job.n, job.t);
+    const res = simulate(job.t, job.n);
+    if (res.status === 'parada') {
+      job.parada++;
+      job.hist[res.ones] = (job.hist[res.ones] || 0) + 1;
+      job.stepHist[res.steps] = (job.stepHist[res.steps] || 0) + 1;
+      if (!job.best || res.ones > job.best.ones) job.best = { ones: res.ones, steps: res.steps, t: Array.from(job.t) };
+    } else if (res.status === 'loop') job.loop++;
+    else job.limite++;
+  }
+  const pct = Math.round((job.next / job.total) * 100);
+  document.getElementById('bar').style.width = pct + '%';
+  document.getElementById('progress').textContent = `Testando ${job.next.toLocaleString('pt-BR')} de ${job.total.toLocaleString('pt-BR')} máquinas (${pct}%)`;
+  if (job.next < job.total) { timer = setTimeout(chunk, 0); return; }
+  finish();
+}
+
+function finish() {
+  document.getElementById('run').disabled = false;
+  document.getElementById('progress').textContent = 'Busca concluída.';
+  document.getElementById('sTotal').textContent = job.total.toLocaleString('pt-BR');
+  document.getElementById('sParada').textContent = job.parada;
+  document.getElementById('sLoop').textContent = job.loop;
+  document.getElementById('sLimite').textContent = job.limite;
+  showHist(job.hist, 'hist', 'uns');
+  showHist(job.stepHist, 'histSteps', 'passos');
+  showChampion(job.best);
+}
+
+// ---- Tela ----
+function showHist(hist, elId, unit) {
+  const h = document.getElementById(elId);
+  h.innerHTML = '';
+  const keys = Object.keys(hist).map(Number);
+  const max = Math.max(...Object.values(hist), 1);
+  for (let k = 0; k <= Math.max(...keys, 0); k++) {
+    const c = hist[k] || 0;
+    h.insertAdjacentHTML('beforeend',
+      `<div class="col"><div class="fill" style="height:${(c / max) * 100}%"></div><small>${k} ${unit}<br>(${c})</small></div>`);
+  }
+}
+
+let frames = [];
+let cur = 0;
+
+function showChampion(best) {
+  if (!best) { document.getElementById('champ').textContent = 'Nenhuma máquina parou.'; return; }
+  const t = best.t;
+  document.getElementById('champ').innerHTML =
+    `Melhor com <b>${n} estados</b>: escreve <b>${best.ones} uns</b> e para em <b>${best.steps} passos</b>.`;
+  let rows = '<tr><th>Estado</th><th>Lê 0</th><th>Lê 1</th></tr>';
+  for (let s = 0; s < n; s++) {
+    const cellText = r => {
+      const k = (s * 2 + r) * 3;
+      return `escreve ${t[k]}, ${t[k + 1] ? 'D' : 'E'}, ${t[k + 2] === n ? 'PARA' : NAMES[t[k + 2]]}`;
+    };
+    rows += `<tr><th>${NAMES[s]}</th><td>${cellText(0)}</td><td>${cellText(1)}</td></tr>`;
+  }
+  document.getElementById('champTable').innerHTML = `<table>${rows}</table>`;
+  frames = replay(t, n);
+  cur = 0;
+  drawFrame();
+}
+
+function drawFrame() {
+  const f = frames[cur];
+  const keys = Object.keys(f.cells).map(Number);
+  const lo = Math.min(0, ...keys) - 2;
+  const hi = Math.max(0, ...keys) + 2;
+  let html = '';
+  for (let p = lo; p <= hi; p++) {
+    const v = f.cells[p] || 0;
+    const cls = ['cell', p === f.head ? 'head' : '', v ? 'one' : ''].join(' ');
+    html += `<div class="${cls}">${v}</div>`;
+  }
+  document.getElementById('tape').innerHTML = html;
+  const last = frames.length - 1;
+  const halted = f.state === n;
+  document.getElementById('stState').textContent = halted ? 'PARA' : NAMES[f.state];
+  document.getElementById('stStep').textContent = `${cur} de ${last}`;
+  document.getElementById('stStatus').textContent = halted ? '✔ máquina parou' : '';
+}
+
+function stopPlay() {
+  clearInterval(playTimer);
+  playTimer = null;
+  document.getElementById('play').textContent = 'Play';
+}
+let playTimer = null;
+
+document.getElementById('run').onclick = () => { clearTimeout(timer); startSearch(); };
+document.getElementById('limit').onchange = e => {
+  LIMIT = Number(e.target.value);
+  document.getElementById('limitNote').textContent = LIMIT;
+  clearTimeout(timer);
+  startSearch();
+};
+document.getElementById('btn2').onclick = () => { n = 2; document.getElementById('run').click(); };
+document.getElementById('btn3').onclick = () => { n = 3; document.getElementById('run').click(); };
+document.getElementById('next').onclick = () => { stopPlay(); if (cur < frames.length - 1) cur++; drawFrame(); };
+document.getElementById('prev').onclick = () => { stopPlay(); if (cur > 0) cur--; drawFrame(); };
+document.getElementById('reset').onclick = () => { stopPlay(); cur = 0; drawFrame(); };
+document.getElementById('play').onclick = () => {
+  if (playTimer) { stopPlay(); return; }
+  document.getElementById('play').textContent = 'Pausar';
+  playTimer = setInterval(() => {
+    if (cur >= frames.length - 1) { stopPlay(); return; }
+    cur++; drawFrame();
+  }, 600);
+};
+
+// Ao abrir, roda 2 estados sozinho (rápido) para já mostrar algo.
+n = 2;
+startSearch();
+</script>
+</body>
+</html>
